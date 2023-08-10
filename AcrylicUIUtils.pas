@@ -331,10 +331,56 @@ end;
 
 function StartAcrylicService: Boolean;
 
+var
+  serviceControlManagerHandle, serviceHandle: SC_HANDLE;
+  serviceStatus: TServiceStatus;
+  tempCharPointer: PChar;
+  checkpoint: DWORD;
+
 begin
 
-    Result := ExecuteCommand('Net.exe Start AcrylicDNSProxySvc') = 0;
+  serviceStatus.dwCurrentState := 0;
 
+  serviceControlManagerHandle := OpenSCManager(
+    PChar(LOCAL_MACHINE), nil, SC_MANAGER_CONNECT);
+
+  if serviceControlManagerHandle > 0 then
+  begin
+    serviceHandle := OpenService(
+      serviceControlManagerHandle,
+      PChar(SERVICE_NAME),
+      SERVICE_START or SERVICE_QUERY_STATUS);
+
+    if serviceHandle > 0 then
+    begin
+      tempCharPointer := nil;
+      if StartService(serviceHandle, 0, tempCharPointer) then
+      begin
+        if QueryServiceStatus(serviceHandle, serviceStatus) then
+        begin
+          while SERVICE_RUNNING <> serviceStatus.dwCurrentState do
+          begin
+            checkpoint := serviceStatus.dwCheckPoint;
+
+            Sleep(serviceStatus.dwWaitHint);
+
+            if not QueryServiceStatus(serviceHandle, serviceStatus) then
+              break;
+
+            if serviceStatus.dwCheckPoint < checkpoint then
+              break;
+
+          end;
+        end;
+      end;
+
+      CloseServiceHandle(serviceHandle);
+    end;
+
+    CloseServiceHandle(serviceControlManagerHandle);
+  end;
+
+  Result := SERVICE_RUNNING = serviceStatus.dwCurrentState;
 end;
 
 // --------------------------------------------------------------------------
@@ -343,9 +389,52 @@ end;
 
 function StopAcrylicService: Boolean;
 
+var
+  serviceControlManagerHandle, serviceHandle: SC_HANDLE;
+  serviceStatus: TServiceStatus;
+  tempCharPointer: PChar;
+  checkPoint: DWORD;
+
 begin
 
-    Result := ExecuteCommand('Net.exe Stop AcrylicDNSProxySvc') = 0;
+  serviceStatus.dwCurrentState := 0;
+
+  serviceControlManagerHandle := OpenSCManager(
+    PChar(LOCAL_MACHINE), nil, SC_MANAGER_CONNECT);
+
+  if serviceControlManagerHandle > 0 then
+  begin
+    serviceHandle := OpenService(
+      serviceControlManagerHandle,
+      PChar(SERVICE_NAME),
+      SERVICE_STOP or SERVICE_QUERY_STATUS);
+
+    if serviceHandle > 0 then
+    begin
+      tempCharPointer := nil;
+      if ControlService(serviceHandle, SERVICE_CONTROL_STOP, serviceStatus) then
+      begin
+        while SERVICE_STOPPED <> serviceStatus.dwCurrentState do
+        begin
+          checkPoint := serviceStatus.dwCheckPoint;
+
+          Sleep(serviceStatus.dwWaitHint);
+
+          if not QueryServiceStatus(serviceHandle, serviceStatus) then
+            break;
+
+          if serviceStatus.dwCheckPoint < checkPoint then
+            break;
+        end;
+      end;
+
+      CloseServiceHandle(serviceHandle);
+    end;
+
+    CloseServiceHandle(serviceControlManagerHandle);
+  end;
+
+  Result := SERVICE_STOPPED = serviceStatus.dwCurrentState;
 
 end;
 
