@@ -32,7 +32,8 @@ uses
   AcrylicUIUtils,
   AcrylicUISettings,
   AcrylicUIRegExTester,
-  AcrylicUIDomainNameAffinityMaskTester;
+  AcrylicUIDomainNameAffinityMaskTester, SynEditHighlighter, SynEditCodeFolding,
+  SynHighlighterCpp, SynHighlighterIni, SynEdit, SynHostFile, VirtualTrees;
 
 // --------------------------------------------------------------------------
 //
@@ -44,7 +45,6 @@ type
     Timer: TTimer;
 
     MainMenu: TMainMenu;
-    Memo: TMemo;
     StatusBar: TStatusBar;
 
     OpenDialog: TOpenDialog;
@@ -79,6 +79,10 @@ type
     HelpMainMenuItem: TMenuItem;
     HelpAcrylicHomePageMainMenuItem: TMenuItem;
     HelpAboutAcrylicMainMenuItem: TMenuItem;
+    Memo: TSynEdit;
+    SynIniSyn1: TSynIniSyn;
+    vstINI: TVirtualStringTree;
+    Splitter1: TSplitter;
 
     procedure TimerTimer(Sender: TObject);
 
@@ -110,6 +114,22 @@ type
 
     procedure HelpAcrylicHomePageMainMenuItemClick(Sender: TObject);
     procedure HelpAboutAcrylicMainMenuItemClick(Sender: TObject);
+    procedure vstINIBeforeCellPaint(Sender: TBaseVirtualTree;
+      TargetCanvas: TCanvas; Node: PVirtualNode; Column: TColumnIndex;
+      CellPaintMode: TVTCellPaintMode; CellRect: TRect; var ContentRect: TRect);
+    procedure vstINIChecked(Sender: TBaseVirtualTree; Node: PVirtualNode);
+    procedure vstINIFreeNode(Sender: TBaseVirtualTree; Node: PVirtualNode);
+    procedure vstINIGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
+      Column: TColumnIndex; TextType: TVSTTextType; var CellText: string);
+    procedure vstINIInitChildren(Sender: TBaseVirtualTree; Node: PVirtualNode;
+      var ChildCount: Cardinal);
+    procedure vstINIInitNode(Sender: TBaseVirtualTree; ParentNode,
+      Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
+    procedure vstININewText(Sender: TBaseVirtualTree; Node: PVirtualNode;
+      Column: TColumnIndex; NewText: string);
+    procedure vstININodeDblClick(Sender: TBaseVirtualTree;
+      const HitInfo: THitInfo);
+    procedure MemoChange(Sender: TObject);
 
   private
 
@@ -118,6 +138,11 @@ type
     AcrylicServiceIsRunning: NBoolean;
     AcrylicServiceIsInstalled: NBoolean;
     AcrylicServiceDebugLogIsEnabled: NBoolean;
+
+    SynHost: TSynHostsSyn;
+    IniText: TStrings;
+    IniBuff: string;
+    procedure ParseINI(text: string);
 
   private
 
@@ -138,6 +163,18 @@ var
 // --------------------------------------------------------------------------
 
 implementation
+
+  type
+    PIniData = ^TIniData;
+    TIniData = record
+      key: string;
+      value: string;
+      savedValue: string;
+      enabled: Boolean;
+      sectionChanges: string;
+      line: Integer;
+      OtherNode: PVirtualNode;
+    end;
 
 // --------------------------------------------------------------------------
 //
@@ -324,6 +361,10 @@ begin
 
   end;
 
+  SynHost := TSynHostsSyn.Create(Self);
+  Memo.Highlighter := SynHost;
+  vstINI.NodeDataSize := SizeOf(TIniData);
+
   Self.UpdateStatusInfo(AcrylicUIUtils.GetAcrylicWelcomeString);
 
   if (ParamStr(1) = 'OpenAcrylicConfigurationFile') then begin
@@ -388,6 +429,8 @@ procedure TMainForm.FormClose(Sender: TObject; var Action: TCloseAction);
 
 begin
 
+  SynHost.Free;
+
   try
 
     AcrylicUISettings.Save(Self, Self.Memo.Font);
@@ -408,6 +451,222 @@ begin
 
   Self.StatusBar.SimpleText := Text; Application.ProcessMessages;
 
+end;
+
+procedure TMainForm.vstINIBeforeCellPaint(Sender: TBaseVirtualTree;
+  TargetCanvas: TCanvas; Node: PVirtualNode; Column: TColumnIndex;
+  CellPaintMode: TVTCellPaintMode; CellRect: TRect; var ContentRect: TRect);
+var
+  Level: Integer;
+  Data: PIniData;
+begin
+
+  Level := Sender.GetNodeLevel(Node);
+  case Level of
+    0:
+    begin
+      TargetCanvas.Brush.Color := $efefef;
+      TargetCanvas.FillRect(CellRect);
+
+      Data := Sender.GetNodeData(Node);
+      if Trim(Data^.sectionchanges) <> '' then
+      begin
+        TargetCanvas.Brush.Color := $76BFFB;
+        TargetCanvas.FillRect(CellRect);
+      end;
+    end;
+    1:
+    begin
+      Data := Sender.GetNodeData(Node);
+
+      if (Node.Index and 1) = 1 then
+      begin
+        TargetCanvas.Brush.Color := $f1f1f1;
+        TargetCanvas.FillRect(CellRect);
+      end;
+
+      if Node.CheckState = csCheckedNormal then
+      begin
+        if not Data^.enabled then // to highlight if changed from original state
+        begin
+          TargetCanvas.Brush.Color := $76BFFB;
+          TargetCanvas.FillRect(CellRect);
+        end
+        else
+          TargetCanvas.Brush.Color := $A3D491;
+
+        TargetCanvas.FillRect(CellRect);
+      end
+      else if Node.CheckState = csUncheckedNormal then
+      begin
+        if Data^.enabled then // to highlight if changed from original state
+        begin
+          TargetCanvas.Brush.Color := $76BFFB;
+          TargetCanvas.FillRect(CellRect);
+        end;
+      end;
+
+      if Data^.savedvalue <> Data^.value then
+      begin
+        TargetCanvas.Brush.Color := $12ddea;
+        TargetCanvas.FillRect(CellRect);
+      end;
+
+    end;
+  end;
+end;
+
+procedure TMainForm.vstINIChecked(Sender: TBaseVirtualTree; Node: PVirtualNode);
+var
+  Level: Integer;
+  Data: Pinidata;
+  ParentData: Pinidata;
+  Nodo: PVirtualNode;
+  I: Integer;
+begin
+//  Node := Sender.FocusedNode;
+  Level := Sender.GetNodeLevel(Node);
+  if Level > 0 then // just to act if subnode is clicked specially for changes on checkbox
+  begin
+    ParentData := Sender.GetNodeData(Node.Parent);
+    Nodo := Sender.GetFirstChild(Node.Parent);
+
+    ParentData^.sectionchanges := '';
+
+    I := 0;
+
+    while Assigned(Nodo) do
+    begin
+
+      Data := Sender.GetNodeData(Nodo);
+
+      if Nodo.CheckState = csCheckedNormal then
+      begin
+        if not Data^.enabled then Inc(I);
+      end
+      else if Nodo.CheckState = csUncheckedNormal then
+      begin
+        if Data^.enabled then Inc(I);
+      end;
+
+      if Data^.savedvalue <> Data^.value then
+        Inc(I);
+
+      if I > 0 then
+      ParentData^.sectionchanges:= I.ToString;
+
+      Nodo := Sender.GetNextSibling(Nodo);
+    end;
+
+    vstINI.RepaintNode(Node.Parent);
+
+    // Let's update the line in its source code
+    Data := Sender.GetNodeData(Node);
+    if Node.CheckState = csCheckedNormal then
+      Memo.Lines[Data^.line] := Data^.key + ' = ' + Data^.value
+    else if Node.CheckState = csUnCheckedNormal then
+      Memo.Lines[Data^.line] := ';'+Data^.key + ' = ' + Data^.value;
+
+//#FIX THIS
+
+  end;
+end;
+
+procedure TMainForm.vstINIFreeNode(Sender: TBaseVirtualTree;
+  Node: PVirtualNode);
+var
+  data: PIniData;
+begin
+  data := vstINI.GetNodeData(Node);
+
+  if Assigned(data) then
+    begin
+      data^.key := '';
+      data^.value := '';
+      data^.savedvalue := '';
+      data^.sectionchanges := '';
+    end;
+end;
+
+procedure TMainForm.vstINIGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
+  Column: TColumnIndex; TextType: TVSTTextType; var CellText: string);
+var
+  Level: Integer;
+  Data: PInidata;
+begin
+  Data := Sender.GetNodeData(Node);
+  Level := Sender.GetNodeLevel(Node);
+  case Column of
+    0: CellText := Data.key;
+    1:
+    begin
+      if Level = 0 then
+      begin
+        if Trim(Data.sectionchanges) <> '' then
+          CellText := 'Changes : '+Data.sectionchanges
+        else
+          CellText := '';
+      end
+      else
+        CellText := Data.value;
+    end;
+    2: CellText := Data.value;
+  end;
+end;
+
+procedure TMainForm.vstINIInitChildren(Sender: TBaseVirtualTree;
+  Node: PVirtualNode; var ChildCount: Cardinal);
+begin
+  ChildCount := Sender.GetNodeLevel(Node) + 2;
+end;
+
+procedure TMainForm.vstINIInitNode(Sender: TBaseVirtualTree; ParentNode,
+  Node: PVirtualNode; var InitialStates: TVirtualNodeInitStates);
+var
+  Level: Integer;
+begin
+  Level := Sender.GetNodeLevel(Node);
+//  Include(InitialStates, ivsHasChildren);
+  if Level = 0 then
+    Node.CheckType := ctNone;
+  if Level = 1 then
+    Node.CheckType := ctCheckBox;
+end;
+
+procedure TMainForm.vstININewText(Sender: TBaseVirtualTree; Node: PVirtualNode;
+  Column: TColumnIndex; NewText: string);
+var
+  Level: Integer;
+  Data: PInidata;
+begin
+  Level := Sender.GetNodeLevel(Node);
+  if Level = 0 then Exit;
+
+  if Column = 1 then
+  begin
+    Data := Sender.GetNodeData(Node);
+    Data^.value := NewText;
+
+    vstINIChecked(Sender, Node);
+  end;
+end;
+
+procedure TMainForm.vstININodeDblClick(Sender: TBaseVirtualTree;
+  const HitInfo: THitInfo);
+var
+  Data: PInidata;
+  Node: PVirtualNode;
+begin
+  Node := Sender.FocusedNode;
+  Data := Sender.GetNodeData(Node);
+  if Assigned(Node) then
+  begin
+    if (Data^.line+1 >=1) and (Data^.line+1 < Memo.Lines.Count) then
+    begin
+      Memo.GotoLineAndCenter(Data^.line+1);
+      //PageControl1.SelectNextPage(True);
+    end;
+  end;
 end;
 
 // --------------------------------------------------------------------------
@@ -469,7 +728,9 @@ begin
 
     Self.Memo.Lines.LoadFromFile(AcrylicConfigurationFilePath);
     Self.Memo.Modified := False;
+    Self.Memo.Highlighter := SynIniSyn1;
     Self.Memo.Visible := True;
+    ParseINI('');
 
     Self.FileSaveMainMenuItem.Enabled := True;
 
@@ -502,6 +763,7 @@ begin
 
     Self.Memo.Lines.LoadFromFile(AcrylicHostsFilePath);
     Self.Memo.Modified := False;
+    Self.Memo.Highlighter := SynHost;
     Self.Memo.Visible := True;
 
     Self.FileSaveMainMenuItem.Enabled := True;
@@ -994,6 +1256,134 @@ begin
 
   ShellExecute(Self.Handle, 'open', 'https://mayakron.altervista.org/support/acrylic/Home.htm', nil, nil, SW_NORMAL);
 
+end;
+
+procedure TMainForm.MemoChange(Sender: TObject);
+begin
+
+  //#TODO Do something with changes e.g. if IniBuff <> Memo.Text then
+
+end;
+
+// --------------------------------------------------------------------------
+//
+// --------------------------------------------------------------------------
+
+procedure TMainForm.ParseINI(text: string);
+var
+  lines: TStrings;
+  I: Integer;
+  node, subnode, extnode, _node: PVirtualNode;
+  data: PIniData;
+  parser: TStringList;
+
+begin
+
+  lines := TStringList.Create;
+  try
+    lines.Text := Memo.Text;
+
+    vstINI.DeleteChildren(vstINI.RootNode);
+
+    // First section will be the GlobalSection'
+//    extnode := vstINI.AddChild(nil);
+//    data := vstINI.GetNodeData(extnode);
+//    data^.key := 'GlobalSection';
+//    data^.line := 0;
+//    data^.sectionchanges := '';
+
+    for i := 0 to lines.Count - 1 do
+      begin
+        if Pos('[',Trim(lines[i])) = 1 then
+        begin
+          node := vstINI.AddChild(nil);
+          data := vstINI.GetNodeData(node);
+          data^.key := Trim(lines[i]);
+          data^.line := i;
+          data^.sectionchanges := ''; //defaults to no changes
+        end
+        // comments out
+        else
+        if Pos(';',Trim(lines[i])) = 1 then
+        begin
+          // find out if is a valid commented/disabled value
+          parser := TStringList.Create;
+          try
+            parser.Text := StringReplace(lines[i], '=',#13#10'#'#13#10,[]);
+            if Pos(' ', Trim(parser[0]))> 0 then
+            begin
+              // is not a valid key value
+            end
+            else if parser.Count > 1 then
+            begin
+              if Assigned(node) then
+              begin
+                _node := nil;
+
+                subnode := vstINI.AddChild(node);
+                data := vstINI.GetNodeData(subnode);
+                data^.key := Copy(parser[0],2);
+                if parser.Count > 2 then
+                begin
+                  data^.value := parser[2];
+                  data^.savedvalue := parser[2];
+                end;
+                data^.line := i;
+                data^.enabled := False;
+                subnode.CheckState := csUncheckedNormal;
+
+                if _node <> nil then node := _node;
+              end;
+            end;
+
+          finally
+            parser.Free;
+          end;
+        end
+        else if Trim(lines[i]) = '' then
+        begin
+          //empty line
+        end
+        else
+        begin
+          parser := TStringList.Create;
+          try
+            parser.Text := StringReplace(lines[i], '=',#13#10'#'#13#10,[]);
+            if Pos(' ', Trim(parser[0]))> 0 then
+            begin
+              // is not a valid key value
+            end
+            else if parser.Count > 1 then
+            begin
+              if Assigned(node) then
+              begin
+                _node := nil;
+
+                subnode := vstINI.AddChild(node);
+                data := vstINI.GetNodeData(subnode);
+                data^.key := parser[0];
+                if parser.Count > 2 then
+                begin
+                  data^.value := parser[2];
+                  data^.savedvalue := parser[2];
+                end;
+                data^.line := i;
+                data^.enabled := True;
+                subnode.CheckState := csCheckedNormal;
+
+                if _node <> nil then node := _node;
+
+              end;
+            end;
+
+          finally
+            parser.Free;
+          end;
+        end;
+      end;
+  finally
+    lines.Free;
+  end;
 end;
 
 // --------------------------------------------------------------------------
