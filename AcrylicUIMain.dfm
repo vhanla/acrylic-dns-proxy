@@ -2,8 +2,8 @@ object MainForm: TMainForm
   Left = 298
   Top = 136
   Caption = 'Acrylic DNS Proxy UI'
-  ClientHeight = 433
-  ClientWidth = 782
+  ClientHeight = 417
+  ClientWidth = 788
   Color = clBtnFace
   Constraints.MinHeight = 480
   Constraints.MinWidth = 800
@@ -18,37 +18,130 @@ object MainForm: TMainForm
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   TextHeight = 13
+  object Splitter1: TSplitter
+    Left = 420
+    Top = 0
+    Height = 394
+    ExplicitLeft = 616
+    ExplicitTop = -6
+  end
   object StatusBar: TStatusBar
     Left = 0
-    Top = 410
-    Width = 782
+    Top = 394
+    Width = 788
     Height = 23
     Panels = <>
     SimplePanel = True
     SizeGrip = False
-    ExplicitTop = 398
-    ExplicitWidth = 784
+    ExplicitTop = 385
+    ExplicitWidth = 782
   end
-  object Memo: TMemo
-    Left = 0
+  object Memo: TSynEdit
+    Left = 423
     Top = 0
-    Width = 782
-    Height = 410
+    Width = 365
+    Height = 394
     Align = alClient
-    Ctl3D = False
-    Font.Charset = ANSI_CHARSET
-    Font.Color = clBlack
-    Font.Height = -12
-    Font.Name = 'Courier New'
-    Font.Style = [fsBold]
-    ParentCtl3D = False
-    ParentFont = False
-    ScrollBars = ssVertical
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -17
+    Font.Name = 'Consolas'
+    Font.Style = []
+    Font.Quality = fqClearTypeNatural
     TabOrder = 1
     Visible = False
+    UseCodeFolding = False
+    Gutter.Font.Charset = DEFAULT_CHARSET
+    Gutter.Font.Color = clWindowText
+    Gutter.Font.Height = -13
+    Gutter.Font.Name = 'Consolas'
+    Gutter.Font.Style = []
+    Gutter.Bands = <
+      item
+        Kind = gbkMarks
+        Width = 13
+      end
+      item
+        Kind = gbkLineNumbers
+      end
+      item
+        Kind = gbkFold
+      end
+      item
+        Kind = gbkTrackChanges
+      end
+      item
+        Kind = gbkMargin
+        Width = 3
+      end>
+    Lines.Strings = (
+      'Memo')
+    SelectedColor.Alpha = 0.400000005960464500
     WantTabs = True
-    ExplicitWidth = 784
-    ExplicitHeight = 398
+    OnChange = MemoChange
+    ExplicitLeft = 0
+    ExplicitWidth = 359
+    ExplicitHeight = 385
+  end
+  object vstINI: TVirtualStringTree
+    Left = 0
+    Top = 0
+    Width = 420
+    Height = 394
+    Align = alLeft
+    Colors.BorderColor = 15987699
+    Colors.DisabledColor = clGray
+    Colors.DropMarkColor = 15385233
+    Colors.DropTargetColor = 15385233
+    Colors.DropTargetBorderColor = 15385233
+    Colors.FocusedSelectionColor = 15385233
+    Colors.FocusedSelectionBorderColor = 15385233
+    Colors.GridLineColor = 15987699
+    Colors.HeaderHotColor = clBlack
+    Colors.HotColor = clBlack
+    Colors.SelectionRectangleBlendColor = 15385233
+    Colors.SelectionRectangleBorderColor = 15385233
+    Colors.SelectionTextColor = clBlack
+    Colors.TreeLineColor = 9471874
+    Colors.UnfocusedColor = clGray
+    Colors.UnfocusedSelectionColor = clWhite
+    Colors.UnfocusedSelectionBorderColor = clWhite
+    Header.AutoSizeIndex = 0
+    Header.Options = [hoColumnResize, hoDrag, hoShowSortGlyphs, hoVisible]
+    TabOrder = 2
+    TreeOptions.AutoOptions = [toAutoDropExpand, toAutoScroll, toAutoTristateTracking]
+    TreeOptions.MiscOptions = [toAcceptOLEDrop, toCheckSupport, toEditable, toInitOnSave, toWheelPanning, toEditOnDblClick]
+    TreeOptions.PaintOptions = [toHideFocusRect, toShowBackground, toShowButtons, toShowDropmark, toShowRoot, toShowTreeLines, toThemeAware, toUseBlendedImages, toUseBlendedSelection]
+    TreeOptions.SelectionOptions = [toExtendedFocus, toFullRowSelect, toRightClickSelect]
+    OnBeforeCellPaint = vstINIBeforeCellPaint
+    OnChecked = vstINIChecked
+    OnFreeNode = vstINIFreeNode
+    OnGetText = vstINIGetText
+    OnInitChildren = vstINIInitChildren
+    OnInitNode = vstINIInitNode
+    OnNewText = vstININewText
+    OnNodeDblClick = vstININodeDblClick
+    Touch.InteractiveGestures = [igPan, igPressAndTap]
+    Touch.InteractiveGestureOptions = [igoPanSingleFingerHorizontal, igoPanSingleFingerVertical, igoPanInertia, igoPanGutter, igoParentPassthrough]
+    ExplicitLeft = 368
+    Columns = <
+      item
+        Options = [coAllowClick, coDraggable, coEnabled, coParentBidiMode, coParentColor, coResizable, coShowDropMark, coVisible, coAllowFocus]
+        Position = 0
+        Text = 'Key'
+        Width = 197
+      end
+      item
+        Position = 1
+        Text = 'Value'
+        Width = 231
+      end
+      item
+        Options = [coAllowClick, coDraggable, coEnabled, coParentBidiMode, coParentColor, coResizable, coShowDropMark, coAllowFocus, coEditable]
+        Position = 2
+        Text = 'Description'
+        Width = 244
+      end>
   end
   object MainMenu: TMainMenu
     AutoHotkeys = maManual
@@ -205,5 +298,9 @@ object MainForm: TMainForm
     Options = [ofHideReadOnly, ofPathMustExist, ofFileMustExist, ofEnableSizing]
     Left = 93
     Top = 4
+  end
+  object SynIniSyn1: TSynIniSyn
+    Left = 456
+    Top = 160
   end
 end
