@@ -15,6 +15,10 @@ interface
 //
 // --------------------------------------------------------------------------
 
+const
+  SERVICE_NAME = 'AcrylicDNSProxySvc';
+  LOCAL_MACHINE = ''; //empty is current machine
+
 type
   NBoolean = (NTrue, NFalse, NUnspecified);
 
@@ -72,7 +76,8 @@ uses
   ShellApi,
   AcrylicVersionInfo,
   PatternMatching,
-  PerlRegEx;
+  PerlRegEx,
+  Winapi.WinSvc;
 
 // --------------------------------------------------------------------------
 //
@@ -87,6 +92,51 @@ var
   AcrylicHostsFilePath: String;
   AcrylicCacheFilePath: String;
   AcrylicDebugLogFilePath: String;
+
+// --------------------------------------------------------------------------
+//
+// --------------------------------------------------------------------------
+
+function GetServiceState(AMachine: string; AServiceName: string) : DWORD;
+
+var
+  serviceControlManagerHandle: SC_HANDLE;
+  serviceHandle: SC_HANDLE;
+  serviceStatus: TServicestatus;
+  currentSvcStatus: DWORD;
+begin
+  currentSvcStatus := 0;
+
+  serviceControlManagerHandle := OpenSCManager(
+    PChar(AMachine), nil, SC_MANAGER_CONNECT);
+
+  if serviceControlManagerHandle > 0 then
+  begin
+    serviceHandle := OpenService(
+      serviceControlManagerHandle,
+      PChar(AServiceName),
+      SERVICE_QUERY_STATUS);
+
+    if serviceHandle > 0 then
+    begin
+      FillChar(serviceStatus, SizeOf(TServiceStatus), 0); // Initialize serviceStatus
+      if QueryServiceStatus(serviceHandle, serviceStatus) then
+      begin
+        currentSvcStatus := serviceStatus.dwCurrentState;
+      end;
+
+      CloseServiceHandle(serviceHandle);
+
+    end;
+
+    CloseServiceHandle(serviceControlManagerHandle);
+
+  end;
+
+  Result := currentSvcStatus;
+
+end;
+
 
 // --------------------------------------------------------------------------
 //
@@ -206,22 +256,30 @@ end;
 function AcrylicServiceIsInstalled: Boolean;
 
 var
-  R: TRegistry;
+  serviceControlManagerHandle: SC_HANDLE;
+  serviceHandle: SC_HANDLE;
 
 begin
 
-  R := nil; try
+  Result := False;
 
-    R := TRegistry.Create;
+  serviceControlManagerHandle := OpenSCManager(
+    PChar(LOCAL_MACHINE), nil, SC_MANAGER_CONNECT);
 
-    R.RootKey := HKEY_LOCAL_MACHINE;
+  if serviceControlManagerHandle > 0 then
+  begin
+    serviceHandle := OpenService(
+      serviceControlManagerHandle,
+      PChar(SERVICE_NAME),
+      SERVICE_QUERY_CONFIG);
 
-    Result := R.KeyExists('SYSTEM\CurrentControlSet\Services\AcrylicDNSProxySvc');
+    if serviceHandle > 0 then
+    begin
+      Result := True;
+      CloseServiceHandle(serviceHandle);
+    end;
 
-  finally
-
-    if (R <> nil) then R.Free;
-
+    CloseServiceHandle(serviceControlManagerHandle);
   end;
 
 end;
@@ -263,7 +321,7 @@ function AcrylicServiceIsRunning: Boolean;
 
 begin
 
-  Result := ProcessExists('AcrylicService.exe');
+  Result := SERVICE_RUNNING = GetServiceState(LOCAL_MACHINE, SERVICE_NAME);
 
 end;
 
